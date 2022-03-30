@@ -1,0 +1,213 @@
+import pysam
+import argparse
+import pandas
+import matplotlib.pyplot as plt
+import numpy as np
+from matplotlib.patches import Rectangle
+
+from scipy.interpolate import make_interp_spline
+import warnings
+warnings.filterwarnings("ignore")
+
+my_parser = argparse.ArgumentParser(description='knockoff supermarket sashimi')
+my_parser.add_argument('-B1',"--bams1",
+                       metavar='bams1',
+                       type=str,
+                       help='comma separated bam files')
+my_parser.add_argument('-n1',"--names1",
+                       metavar='names1',
+                       type=str,
+                       help='comma separated names')
+my_parser.add_argument('-B2',"--bams2",
+                       metavar='bams2',
+                       type=str,
+                       help='comma separated bam files')
+my_parser.add_argument('-n2',"--names2",
+                       metavar='names2',
+                       type=str,
+                       help='comma separated names')
+
+my_parser.add_argument('-l1',"--label1",
+                       metavar='label1',
+                       type=str,default='',
+                       help='label for group 1')
+my_parser.add_argument('-l2',"--label2",
+                       metavar='label2',
+                       type=str,default='',
+                       help='label for group 2')
+
+my_parser.add_argument('-c','--coords',
+                       metavar='coords',
+                       type=str,
+                       help='coordinates chr:start-end')
+                       
+my_parser.add_argument('-p','--padding',
+                       metavar='padding',
+                       type=float,default=0.1,
+                       help='coordinates chr:start-end')
+my_parser.add_argument('-o','--output',
+                       metavar='output',
+                       type=str,
+                       help='output file')
+my_parser.add_argument('-a','--annotations',
+                       metavar='annotations',
+                       type=str,
+                       help='gtf annotations file')
+
+
+args = my_parser.parse_args()
+files1=dict(zip(args.names1.split(','),args.bams1.split(',')))
+files2=dict(zip(args.names2.split(','),args.bams2.split(',')))
+coords=args.coords
+chromosome,ss=coords.split(':')
+start,stop=ss.replace(',','').split('-')
+start,stop=int(start),int(stop)
+size=stop-start
+size*= 1+args.padding
+stop,start=start+size,stop-size
+start,stop=int(start),int(stop)
+output=args.output
+
+def read_gtf(gtffile):
+    gtf=pandas.read_csv(gtffile,sep='\t',header=None,names=['chromosome','source','feature','start','end','score','strand','frame','attributes'])
+    gtf=gtf[gtf.feature=='exon']
+    gtf=gtf[gtf.chromosome==chromosome]
+    gtf=gtf[gtf.start<stop]
+    gtf=gtf[gtf.end>start]
+    gtf=gtf.sort_values(by=['start','end'])
+    gtf=gtf.reset_index(drop=True)
+    #separete attributes
+    attributes= []
+    for attribute in gtf['attributes']:
+        for a in attribute.split('; '):
+            if a != '':
+                attributes.append(a.split(' ')[0])
+    for attribute in (set(attributes)):
+        gtf[attribute]=gtf['attributes'].apply(lambda x:x.split('; ')[attributes.index(attribute)].split(' ')[1].replace('"',''))
+    del gtf['attributes']
+    return gtf
+gtf=read_gtf(args.annotations)
+
+def calc_lane(bam,chromosome,start,end):
+    junctions={}
+    ARR={n:0 for n in range(start,end)}
+    bam=pysam.AlignmentFile(bam)
+    for n,read in enumerate(bam.fetch(chromosome,start,end)):
+        blocks=(read.get_blocks())
+        prev_end=-1
+        for _start,_end in blocks:
+            if prev_end>0:
+                if not (prev_end,_start) in junctions:
+                    junctions[(prev_end,_start)]=1
+                else:
+                    junctions[(prev_end,_start)]+=1
+            prev_end=_end
+            for i in range(_start,_end):
+                if i in ARR:
+                    ARR[i]+=1
+    return (ARR,junctions)
+
+fig,(ax,ax2)=plt.subplots(2,1,sharex=True,
+                          gridspec_kw={'height_ratios': [3, 1]},
+                          figsize=(10,10)
+                          )
+def mean(x):
+    return sum(x)/len(x)
+
+#plot gtf genes
+x=0
+yticklabels=[]
+for transcript_id in set(gtf.transcript_id):
+    transcript=gtf[gtf.transcript_id==transcript_id]
+    #ax2.text(start,x+.5,
+    #        f' {transcript.gene_name.values[0]}{transcript_id}',ha='left',va='center')
+    yticklabels.append(f' {transcript.gene_name.values[0]}{transcript_id}')
+    ax2.plot([start,stop],[x+.5,x+.5],color='gray',alpha=0.5)
+    for _,row in transcript.iterrows():
+        ax2.add_patch(
+            Rectangle(
+                (row.start,x+.1),
+                row.end-row.start,
+                .9,
+                facecolor='blue',
+                edgecolor='black'
+            )
+        )
+        ax2.text(
+            (row.start+row.end)/2,
+            x+.5,
+            row.exon_number,
+            ha='center',va='center')
+
+    x+=1
+ax2.set_yticks([i+.5 for i in range(x)])
+ax2.set_yticklabels(yticklabels)
+ax2.set_ylim(0,x)
+
+for a,b in list(files1.items())+list(files2.items()):
+
+    #plot reads
+    if a in files2:
+        MULT=-1
+    else:
+        MULT=1
+
+    arr,junctions=calc_lane(b,chromosome,start,stop)
+    (pandas.Series(arr)*MULT).plot(ax=ax,label=a)
+    color = ax.get_lines()[-1].get_color()
+    #plot junctions
+    for (juncstart,juncend),count in junctions.items():
+        if juncstart in arr:
+            start_count=arr[juncstart-1]*MULT
+        else:
+            start_count=0
+        if juncend in arr:
+            end_count=arr[juncend]*MULT
+        else:
+            end_count=0
+        if juncstart<start and juncend>stop:
+            continue
+        #plot junctions
+        x=np.linspace(juncstart,juncend,100)
+        #check if x has no duplicates
+        if len(set(x))==len(x):
+            spl = make_interp_spline(
+                        [juncstart,mean([juncstart,juncend]),juncend],
+                        [start_count,start_count+end_count,end_count],k=2)
+            y_smooth = spl(x)
+            ax.plot(x,y_smooth,color=color,alpha=0.5)
+            #write the number junction reads
+            if mean([juncstart,juncend])>start and mean([juncstart,juncend])<stop and count>1:
+                ax.text(
+                    mean([juncstart,juncend]),
+                    start_count+end_count,
+                    str(count),
+                    horizontalalignment='center',
+                    verticalalignment='center',
+                        color=color)
+#plot legend
+#list of lines in ax
+lines=ax.get_lines()
+L1,L2=[],[]
+for line in lines:
+    if line.get_label() in files1:
+        L1.append(line)
+    elif line.get_label() in files2:
+        L2.append(line)
+
+from matplotlib.legend import Legend
+leg=Legend(ax,L1 ,files1.keys(),loc='upper left',title=args.label1)
+ax.add_artist(leg)
+leg=Legend(ax,L2 ,files2.keys(),loc='lower left',title=args.label2)
+ax.add_artist(leg)
+#l1=ax.legend(L1,loc='upper left',title=args.label1)
+#l2=ax.legend(L2,loc='lower left',title=args.label2)
+#ax.add_artist(l1)
+#ax.add_artist(l2)
+ax.set_ylabel("Read counts")
+ax.set_xlim(start,stop)
+ax.set_yticklabels([abs(i) for i in ax.get_yticks()])
+if output==None:
+    output=args.coords+'.png'
+plt.tight_layout()
+plt.savefig(output,dpi=400)
