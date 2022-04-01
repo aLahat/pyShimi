@@ -14,7 +14,7 @@ warnings.filterwarnings("ignore")
 my_parser = argparse.ArgumentParser(description='knockoff supermarket sashimi')
 my_parser.add_argument('-B1',"--bams1",
                        metavar='bams1',
-                       type=str,
+                       type=str,default="",
                        help='comma separated bam files')
 my_parser.add_argument('-n1',"--names1",
                        metavar='names1',
@@ -22,7 +22,7 @@ my_parser.add_argument('-n1',"--names1",
                        help='comma separated names')
 my_parser.add_argument('-B2',"--bams2",
                        metavar='bams2',
-                       type=str,
+                       type=str,default="",
                        help='comma separated bam files')
 my_parser.add_argument('-n2',"--names2",
                        metavar='names2',
@@ -76,6 +76,10 @@ if names2 == "":
 
 files1=dict(zip(names1.split(','),args.bams1.split(',')))
 files2=dict(zip(names2.split(','),args.bams2.split(',')))
+if '' in files1:
+    del files1['']
+if '' in files2:
+    del files2['']
 coords=args.coords
 chromosome,ss=coords.split(':')
 start,stop=ss.replace(',','').split('-')
