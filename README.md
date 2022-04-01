@@ -16,7 +16,20 @@ pyshimi -B1 [bams separated by comma]
 will result in:
 ![chr1542409094-42409380](https://user-images.githubusercontent.com/5287805/161251832-1f3016e9-6262-4394-b1a4-086af0c4e367.png)
 
+You dont need to run two samples with multiple files, just one bam file (or multiple ones in one group) is enought:
 
+```
+pyshimi -B1 [bams separated by comma]
+        -n1 [sample names separated by comma] 
+        -l1 mutant 
+        -c chr15:42409094-42409380 
+        -p 1 
+        -a hg38.ncbiRefSeq.gtf 
+```
+
+![chr1542409094-42409380](https://user-images.githubusercontent.com/5287805/161254854-68e26efa-75c7-4761-9026-8d6452e4f179.png)
+
+##install 
 Requires:
 1) pysam
 2) pandas
