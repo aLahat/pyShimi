@@ -63,3 +63,4 @@ optional:
 
 -p --padding: left and right padding, multiplies by window size.
 
+-o --output: Output filename, can choose image format as well (.pdf, .png...) if not given will return a png with the coordinates as filename.
