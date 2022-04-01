@@ -18,7 +18,7 @@ my_parser.add_argument('-B1',"--bams1",
                        help='comma separated bam files')
 my_parser.add_argument('-n1',"--names1",
                        metavar='names1',
-                       type=str,
+                       type=str,default="",
                        help='comma separated names')
 my_parser.add_argument('-B2',"--bams2",
                        metavar='bams2',
@@ -26,7 +26,7 @@ my_parser.add_argument('-B2',"--bams2",
                        help='comma separated bam files')
 my_parser.add_argument('-n2',"--names2",
                        metavar='names2',
-                       type=str,
+                       type=str,default="",
                        help='comma separated names')
 
 my_parser.add_argument('-l1',"--label1",
@@ -42,18 +42,19 @@ my_parser.add_argument('-c','--coords',
                        metavar='coords',
                        type=str,
                        help='coordinates chr:start-end')
-                       
+
 my_parser.add_argument('-p','--padding',
                        metavar='padding',
                        type=float,default=0.1,
-                       help='coordinates chr:start-end')
+                       help='left and right padding, multiplies by window size')
 my_parser.add_argument('-o','--output',
                        metavar='output',
                        type=str,
                        help='output file')
+
 my_parser.add_argument('-a','--annotations',
                        metavar='annotations',
-                       type=str,
+                       type=str,default='',
                        help='gtf annotations file')
 my_parser.add_argument('-m','--minJunctCount',
                        metavar='minJunctCount',
@@ -66,8 +67,15 @@ my_parser.add_argument('-g','--gene',
 
 
 args = my_parser.parse_args()
-files1=dict(zip(args.names1.split(','),args.bams1.split(',')))
-files2=dict(zip(args.names2.split(','),args.bams2.split(',')))
+names1 = args.names1
+names2 = args.names2
+if names1 == "":
+    names1 = args.bams1
+if names2 == "":
+    names2 = args.bams2
+
+files1=dict(zip(names1.split(','),args.bams1.split(',')))
+files2=dict(zip(names2.split(','),args.bams2.split(',')))
 coords=args.coords
 chromosome,ss=coords.split(':')
 start,stop=ss.replace(',','').split('-')
@@ -99,7 +107,8 @@ def read_gtf(gtffile):
     if gene!= "":
         gtf=gtf[gtf.gene_id==gene]
     return gtf
-gtf=read_gtf(args.annotations)
+if args.annotations != "":
+    gtf=read_gtf(args.annotations)
 
 def calc_lane(bam,chromosome,start,end):
     junctions={}
@@ -119,60 +128,64 @@ def calc_lane(bam,chromosome,start,end):
                 if i in ARR:
                     ARR[i]+=1
     return (ARR,junctions)
+if args.annotations != "":
+    fig,(ax,ax2)=plt.subplots(2,1,sharex=True,
+                              gridspec_kw={'height_ratios': [3, 1]},
+                              figsize=(10,10)
+                              )
+else:
+    fig,ax=plt.subplots(1,1,figsize=(10,10))
 
-fig,(ax,ax2)=plt.subplots(2,1,sharex=True,
-                          gridspec_kw={'height_ratios': [3, 1]},
-                          figsize=(10,10)
-                          )
 def mean(x):
     return sum(x)/len(x)
 
-#plot gtf genes
-x=0
-yticklabels=[]
 
-transcript_deduplicator=pandas.Series()
-if len(gtf)>0:
-    for transcript_id in set(gtf.transcript_id):
-        transcript=gtf[gtf.transcript_id==transcript_id]
-        transcript_deduplicator[transcript_id]=str(transcript[["start","end","gene_name","exon_number"]].values)
-transcript_deduplicated=transcript_deduplicator.drop_duplicates().index
-if len(gtf)>0:
-    for transcript_id in transcript_deduplicated:
-        transcript=gtf[gtf.transcript_id==transcript_id]
-        #ax2.text(start,x+.5,
-        #        f' {transcript.gene_name.values[0]}{transcript_id}',ha='left',va='center')
-        yticklabels.append(f' {transcript.gene_name.values[0]}')
-        ax2.plot([start,stop],[x+.5,x+.5],color='gray',alpha=0.5)
-        for _,row in transcript.iterrows():
-            ax2.add_patch(
-                Rectangle(
-                    (row.start,x+.1),
-                    row.end-row.start,
-                    .9,
-                    facecolor='blue',
-                    edgecolor='black'
+if args.annotations != "":
+    #plot gtf genes
+    x=0
+    yticklabels=[]
+    transcript_deduplicator=pandas.Series()
+    if len(gtf)>0:
+        for transcript_id in set(gtf.transcript_id):
+            transcript=gtf[gtf.transcript_id==transcript_id]
+            transcript_deduplicator[transcript_id]=str(transcript[["start","end","gene_name","exon_number"]].values)
+    transcript_deduplicated=transcript_deduplicator.drop_duplicates().index
+    if len(gtf)>0:
+        for transcript_id in transcript_deduplicated:
+            transcript=gtf[gtf.transcript_id==transcript_id]
+            #ax2.text(start,x+.5,
+            #        f' {transcript.gene_name.values[0]}{transcript_id}',ha='left',va='center')
+            yticklabels.append(f' {transcript.gene_name.values[0]}')
+            ax2.plot([start,stop],[x+.5,x+.5],color='gray',alpha=0.5)
+            for _,row in transcript.iterrows():
+                ax2.add_patch(
+                    Rectangle(
+                        (row.start,x+.1),
+                        row.end-row.start,
+                        .9,
+                        facecolor='blue',
+                        edgecolor='black'
+                    )
                 )
-            )
-            if row.start < start:
-                _start=start
-            else:
-                _start=row.start
-            if row.end > stop:
-                _end=stop
-            else:
-                _end=row.end
+                if row.start < start:
+                    _start=start
+                else:
+                    _start=row.start
+                if row.end > stop:
+                    _end=stop
+                else:
+                    _end=row.end
 
-            ax2.text(
-                (_start+_end)/2,
-                x+.5,
-                row.exon_number,
-                ha='center',va='center')
+                ax2.text(
+                    (_start+_end)/2,
+                    x+.5,
+                    row.exon_number,
+                    ha='center',va='center')
 
-        x+=1
-    ax2.set_yticks([i+.5 for i in range(x)])
-    ax2.set_yticklabels(yticklabels)
-    ax2.set_ylim(0,x)
+            x+=1
+        ax2.set_yticks([i+.5 for i in range(x)])
+        ax2.set_yticklabels(yticklabels)
+        ax2.set_ylim(0,x)
 
 for a,b in list(files1.items())+list(files2.items()):
     #plot reads
