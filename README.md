@@ -3,10 +3,10 @@ Small and fast Sashimi plotter. I am my main target users, so I'll add functiona
 
 Example use:
 ```
-pyshimi -B1 ../port/results/majiq/bams/RPE.mutant.1a3.1.bam 
-        -B2 ../port/results/majiq/bams/RPE.mutant.1a3.2.bam,../port/results/majiq/bams/RPE.mutant.1a3.1.bam  
-        -n1 RPE.Mutant.1a3.1 
-        -n2 2,RPE.Mutant. 
+pyshimi -B1 [bams separated by comma]
+        -B2 [bams separated by comma]
+        -n1 [sample names separated by comma] 
+        -n2 [sample names separated by comma] 
         -l1 mutant 
         -l2 corrected
         -c chr15:42409094-42409380 
@@ -14,7 +14,8 @@ pyshimi -B1 ../port/results/majiq/bams/RPE.mutant.1a3.1.bam
         -a hg38.ncbiRefSeq.gtf 
 ```
 will result in:
-![chr1542409094-42409380](https://user-images.githubusercontent.com/5287805/160927118-8e4ef76f-e282-428c-966c-c4b0845c6097.png)
+![chr1542409094-42409380](https://user-images.githubusercontent.com/5287805/161251832-1f3016e9-6262-4394-b1a4-086af0c4e367.png)
+
 
 Requires:
 1) pysam
@@ -24,4 +25,25 @@ Requires:
 5) matplotlib
 
 to install just put the pyshimi file somwhere in yor $PATH or just call it directly `python [path to file]/pyshimi -B1 ...`
+
+## arguments
+
+required:
+
+**-B1 -B2 --bams1 --bams2**: Comma separated list of bam files (index files needed in the same directory) for the top plot (-B1/--bams1) or bottom plot (-B2/--bams2).
+
+**-c --coords**: genomic coordinates in the `chr:start-end` format.
+
+optional:
+
+-n1 -n2 --names1 --names2: Comma separated list of names for the samples, one for each bam file. If none given will use bam file names instead. But the names might be too long for an elegant plot.
+
+-l1 -l2 --label1 --label2: names for the group labels.
+
+-a --annotations: path to gtf file to draw genes and exonic regions below the sashimi plot
+
+-g --gene: gene name to use when plotting the bottom gene plot. will ignore other genes.
+
+-m --minJunctCount: minimum number of junction counts to write the number for (they will still get lines), useful if too many junctions have a low number of counts and it makes it too hard to read the larger numbers.
+
 
