@@ -29,7 +29,7 @@ pyshimi -B1 [bams separated by comma]
 
 ![chr1542409094-42409380](https://user-images.githubusercontent.com/5287805/161254854-68e26efa-75c7-4761-9026-8d6452e4f179.png)
 
-##install 
+## install 
 Requires:
 1) pysam
 2) pandas
