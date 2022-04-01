@@ -1,5 +1,4 @@
 #! /user/bin/env python
-
 import pysam
 import argparse
 import pandas
@@ -9,6 +8,7 @@ from matplotlib.patches import Rectangle
 
 from scipy.interpolate import make_interp_spline
 import warnings
+from random import choice
 warnings.filterwarnings("ignore")
 
 my_parser = argparse.ArgumentParser(description='knockoff supermarket sashimi')
@@ -55,6 +55,14 @@ my_parser.add_argument('-a','--annotations',
                        metavar='annotations',
                        type=str,
                        help='gtf annotations file')
+my_parser.add_argument('-m','--minJunctCount',
+                       metavar='minJunctCount',
+                       type=int, default=1,
+                       help='minimum number of junctions counts to show numbers of')
+my_parser.add_argument('-g','--gene',
+                       metavar='gene',
+                       type=str, default="",
+                       help='filter by gene (coordinates still needed)')
 
 
 args = my_parser.parse_args()
@@ -69,6 +77,7 @@ size*= 1+args.padding
 stop,start=start+size,stop-size
 start,stop=int(start),int(stop)
 output=args.output
+gene=args.gene
 
 def read_gtf(gtffile):
     gtf=pandas.read_csv(gtffile,sep='\t',header=None,names=['chromosome','source','feature','start','end','score','strand','frame','attributes'])
@@ -87,6 +96,8 @@ def read_gtf(gtffile):
     for attribute in (set(attributes)):
         gtf[attribute]=gtf['attributes'].apply(lambda x:x.split('; ')[attributes.index(attribute)].split(' ')[1].replace('"',''))
     del gtf['attributes']
+    if gene!= "":
+        gtf=gtf[gtf.gene_id==gene]
     return gtf
 gtf=read_gtf(args.annotations)
 
@@ -119,41 +130,56 @@ def mean(x):
 #plot gtf genes
 x=0
 yticklabels=[]
-for transcript_id in set(gtf.transcript_id):
-    transcript=gtf[gtf.transcript_id==transcript_id]
-    #ax2.text(start,x+.5,
-    #        f' {transcript.gene_name.values[0]}{transcript_id}',ha='left',va='center')
-    yticklabels.append(f' {transcript.gene_name.values[0]}{transcript_id}')
-    ax2.plot([start,stop],[x+.5,x+.5],color='gray',alpha=0.5)
-    for _,row in transcript.iterrows():
-        ax2.add_patch(
-            Rectangle(
-                (row.start,x+.1),
-                row.end-row.start,
-                .9,
-                facecolor='blue',
-                edgecolor='black'
-            )
-        )
-        ax2.text(
-            (row.start+row.end)/2,
-            x+.5,
-            row.exon_number,
-            ha='center',va='center')
 
-    x+=1
-ax2.set_yticks([i+.5 for i in range(x)])
-ax2.set_yticklabels(yticklabels)
-ax2.set_ylim(0,x)
+transcript_deduplicator=pandas.Series()
+if len(gtf)>0:
+    for transcript_id in set(gtf.transcript_id):
+        transcript=gtf[gtf.transcript_id==transcript_id]
+        transcript_deduplicator[transcript_id]=str(transcript[["start","end","gene_name","exon_number"]].values)
+transcript_deduplicated=transcript_deduplicator.drop_duplicates().index
+if len(gtf)>0:
+    for transcript_id in transcript_deduplicated:
+        transcript=gtf[gtf.transcript_id==transcript_id]
+        #ax2.text(start,x+.5,
+        #        f' {transcript.gene_name.values[0]}{transcript_id}',ha='left',va='center')
+        yticklabels.append(f' {transcript.gene_name.values[0]}')
+        ax2.plot([start,stop],[x+.5,x+.5],color='gray',alpha=0.5)
+        for _,row in transcript.iterrows():
+            ax2.add_patch(
+                Rectangle(
+                    (row.start,x+.1),
+                    row.end-row.start,
+                    .9,
+                    facecolor='blue',
+                    edgecolor='black'
+                )
+            )
+            if row.start < start:
+                _start=start
+            else:
+                _start=row.start
+            if row.end > stop:
+                _end=stop
+            else:
+                _end=row.end
+
+            ax2.text(
+                (_start+_end)/2,
+                x+.5,
+                row.exon_number,
+                ha='center',va='center')
+
+        x+=1
+    ax2.set_yticks([i+.5 for i in range(x)])
+    ax2.set_yticklabels(yticklabels)
+    ax2.set_ylim(0,x)
 
 for a,b in list(files1.items())+list(files2.items()):
-
     #plot reads
     if a in files2:
         MULT=-1
     else:
         MULT=1
-
     arr,junctions=calc_lane(b,chromosome,start,stop)
     (pandas.Series(arr)*MULT).plot(ax=ax,label=a)
     color = ax.get_lines()[-1].get_color()
@@ -170,6 +196,8 @@ for a,b in list(files1.items())+list(files2.items()):
         if juncstart<start and juncend>stop:
             continue
         #plot junctions
+        if start_count==0:start_count=end_count
+        if end_count==0:end_count=start_count
         x=np.linspace(juncstart,juncend,100)
         #check if x has no duplicates
         if len(set(x))==len(x):
@@ -177,12 +205,14 @@ for a,b in list(files1.items())+list(files2.items()):
                         [juncstart,mean([juncstart,juncend]),juncend],
                         [start_count,start_count+end_count,end_count],k=2)
             y_smooth = spl(x)
-            ax.plot(x,y_smooth,color=color,alpha=0.5)
+            ax.plot(x,y_smooth,color=color,alpha=0.5,linewidth=np.log(count)/2+.5)
             #write the number junction reads
-            if mean([juncstart,juncend])>start and mean([juncstart,juncend])<stop and count>1:
+            if mean([juncstart,juncend])>start and mean([juncstart,juncend])<stop and count>int(args.minJunctCount):
+                _x=choice(x[20:80])
+                _y=dict(zip(x,y_smooth))[_x]
                 ax.text(
-                    mean([juncstart,juncend]),
-                    start_count+end_count,
+                    _x,
+                    _y,
                     str(count),
                     horizontalalignment='center',
                     verticalalignment='center',
@@ -198,9 +228,9 @@ for line in lines:
         L2.append(line)
 
 from matplotlib.legend import Legend
-leg=Legend(ax,L1 ,files1.keys(),loc='upper left',title=args.label1)
+leg=Legend(ax,L1 ,files1.keys(),loc='upper right',title=args.label1,bbox_to_anchor=(0,1))
 ax.add_artist(leg)
-leg=Legend(ax,L2 ,files2.keys(),loc='lower left',title=args.label2)
+leg=Legend(ax,L2 ,files2.keys(),loc='lower right',title=args.label2,bbox_to_anchor=(0,0))
 ax.add_artist(leg)
 #l1=ax.legend(L1,loc='upper left',title=args.label1)
 #l2=ax.legend(L2,loc='lower left',title=args.label2)
@@ -212,4 +242,4 @@ ax.set_yticklabels([abs(i) for i in ax.get_yticks()])
 if output==None:
     output=args.coords+'.png'
 plt.tight_layout()
-plt.savefig(output,dpi=400)
+plt.savefig(output,dpi=400, bbox_inches="tight")
