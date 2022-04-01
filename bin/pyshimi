@@ -5,7 +5,7 @@ import pandas
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.patches import Rectangle
-
+import os
 from scipy.interpolate import make_interp_spline
 import warnings
 from random import choice
@@ -76,6 +76,17 @@ if names2 == "":
 
 files1=dict(zip(names1.split(','),args.bams1.split(',')))
 files2=dict(zip(names2.split(','),args.bams2.split(',')))
+# add some metadata to the files, MULT 1 or negative 1 and the values will be multiplied to be plotted, in order
+# to revert the second group.
+# "cheat" will add a white space to the name of the samples of the second group, this is because if the sample names
+# are the same, the legend will be the same, so we add a white space to the second group to make it different
+for files,MULT,cheat in [(files1,1,''),(files2,-1,' ')]:
+    for a,b in files.items():
+        if not os.path.isfile(b):
+            print(b,'not found')
+            sys.exit()
+        del files[a]
+        files[a+cheat]=(b,MULT)
 if '' in files1:
     del files1['']
 if '' in files2:
@@ -191,12 +202,8 @@ if args.annotations != "":
         ax2.set_yticklabels(yticklabels)
         ax2.set_ylim(0,x)
 
-for a,b in list(files1.items())+list(files2.items()):
+for a,(b,MULT) in list(files1.items())+list(files2.items()):
     #plot reads
-    if a in files2:
-        MULT=-1
-    else:
-        MULT=1
     arr,junctions=calc_lane(b,chromosome,start,stop)
     (pandas.Series(arr)*MULT).plot(ax=ax,label=a)
     color = ax.get_lines()[-1].get_color()
@@ -225,7 +232,9 @@ for a,b in list(files1.items())+list(files2.items()):
             ax.plot(x,y_smooth,color=color,alpha=0.5,linewidth=np.log(count)/2+.5)
             #write the number junction reads
             if mean([juncstart,juncend])>start and mean([juncstart,juncend])<stop and count>int(args.minJunctCount):
-                _x=choice(x[20:80])
+                _x=-1
+                while not start<_x<stop:
+                    _x=choice(x[20:80])
                 _y=dict(zip(x,y_smooth))[_x]
                 ax.text(
                     _x,
@@ -241,7 +250,7 @@ L1,L2=[],[]
 for line in lines:
     if line.get_label() in files1:
         L1.append(line)
-    elif line.get_label() in files2:
+    if line.get_label() in files2:
         L2.append(line)
 
 from matplotlib.legend import Legend
