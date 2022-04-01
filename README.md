@@ -61,4 +61,5 @@ optional:
 
 -m --minJunctCount: minimum number of junction counts to write the number for (they will still get lines), useful if too many junctions have a low number of counts and it makes it too hard to read the larger numbers.
 
+-p --padding: left and right padding, multiplies by window size.
 
