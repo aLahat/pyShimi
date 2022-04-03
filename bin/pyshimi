@@ -75,18 +75,18 @@ if names2 == "":
     names2 = args.bams2
 
 files1=dict(zip(names1.split(','),args.bams1.split(',')))
-files2=dict(zip(names2.split(','),args.bams2.split(',')))
+files2=dict(zip([i+' ' for  i in names2.split(',')],args.bams2.split(',')))
 # add some metadata to the files, MULT 1 or negative 1 and the values will be multiplied to be plotted, in order
 # to revert the second group.
 # "cheat" will add a white space to the name of the samples of the second group, this is because if the sample names
 # are the same, the legend will be the same, so we add a white space to the second group to make it different
-for files,MULT,cheat in [(files1,1,''),(files2,-1,' ')]:
+from pprint import pprint
+for files,MULT in [(files1,1),(files2,-1)]:
     for a,b in files.items():
         if not os.path.isfile(b):
             print(b,'not found')
             sys.exit()
-        del files[a]
-        files[a+cheat]=(b,MULT)
+        files[a]=(b,MULT)
 if '' in files1:
     del files1['']
 if '' in files2:
