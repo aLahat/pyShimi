@@ -43,6 +43,11 @@ my_parser.add_argument('-c','--coords',
                        type=str,
                        help='coordinates chr:start-end')
 
+my_parser.add_argument('-s','--strand',
+                       metavar='strand',
+                       type=str, default='BOTH',
+                       help='strand: "+", "-", or "BOTH", default="BOTH"')
+
 my_parser.add_argument('-p','--padding',
                        metavar='padding',
                        type=float,default=0.1,
@@ -73,7 +78,7 @@ if names1 == "":
     names1 = args.bams1
 if names2 == "":
     names2 = args.bams2
-
+strand = args.strand
 files1=dict(zip(names1.split(','),args.bams1.split(',')))
 files2=dict(zip([i+' ' for  i in names2.split(',')],args.bams2.split(',')))
 # add some metadata to the files, MULT 1 or negative 1 and the values will be multiplied to be plotted, in order
@@ -124,24 +129,48 @@ def read_gtf(gtffile):
     return gtf
 if args.annotations != "":
     gtf=read_gtf(args.annotations)
-
+def read_flag(flag):
+    flag=str((bin(flag))).replace('0b','')
+    while len(flag)<12:
+        flag="0"+flag
+    flagD={
+        "supplementary alignment":flag[0]=='1',
+        "PCR or optical duplicate":flag[1]=='1',
+        "not passing filters, such as platform/vendor quality controls":flag[2]=='1',
+        "secondary alignment":flag[3]=='1',
+        "the last segment in the template":flag[4]=='1',
+        "the first segment in the template":flag[5]=='1',
+        "SEQ of the next segment in the template being reverse complemented":flag[6]=='1',
+        "SEQ being reverse complemented":flag[7]=='1',
+        "next segment in the template unmapped":flag[8]=='1',
+        "segment unmapped":flag[9]=='1',
+        "each segment properly aligned according to the aligner":flag[10]=='1',
+        "template having multiple segments in sequencing":flag[11]=='1',
+            }
+    if flagD['SEQ being reverse complemented']:
+        flagD['strand']='-'
+    else:
+        flagD['strand']='+'
+    return flagD
 def calc_lane(bam,chromosome,start,end):
     junctions={}
     ARR={n:0 for n in range(start,end)}
     bam=pysam.AlignmentFile(bam)
     for n,read in enumerate(bam.fetch(chromosome,start,end)):
-        blocks=(read.get_blocks())
-        prev_end=-1
-        for _start,_end in blocks:
-            if prev_end>0:
-                if not (prev_end,_start) in junctions:
-                    junctions[(prev_end,_start)]=1
-                else:
-                    junctions[(prev_end,_start)]+=1
-            prev_end=_end
-            for i in range(_start,_end):
-                if i in ARR:
-                    ARR[i]+=1
+        _strand=read_flag(read.flag)['strand']
+        if strand=='BOTH' or strand==_strand:
+            blocks=(read.get_blocks())
+            prev_end=-1
+            for _start,_end in blocks:
+                if prev_end>0:
+                    if not (prev_end,_start) in junctions:
+                        junctions[(prev_end,_start)]=1
+                    else:
+                        junctions[(prev_end,_start)]+=1
+                prev_end=_end
+                for i in range(_start,_end):
+                    if i in ARR:
+                        ARR[i]+=1
     return (ARR,junctions)
 if args.annotations != "":
     fig,(ax,ax2)=plt.subplots(2,1,sharex=True,
